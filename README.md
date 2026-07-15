@@ -65,20 +65,28 @@ The package contains two independent C++ nodes:
 ```
 
 ### 2. Compile the Package
+```bash
 cd ~/ros2_ws
 colcon build --packages-select camera_processing
+```
 
 ### 3. Source the Environment
+```bash
 source install/setup.bash
+```
 
 ---
 
 ## Running the Nodes
 
 * Terminal 1: Start the Video Processor
+```bash
   source ~/ros2_ws/install/setup.bash
   ros2 run camera_processing video_processor
+```
 
 * Terminal 2: Launch the Dashboard GUI
+```bash
   source ~/ros2_ws/install/setup.bash
   ros2 run camera_processing dashboard
+```
