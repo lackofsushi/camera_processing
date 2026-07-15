@@ -9,8 +9,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
-find_package(OpenCV REQUIRED) # <-- Added OpenCV dependency
+find_package(ament_index_cpp REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # =========================================================================
 # 1. Target: video_processor
@@ -19,6 +21,7 @@ add_executable(video_processor src/video_processor.cpp)
 target_link_libraries(video_processor PRIVATE
   rclcpp::rclcpp
   sensor_msgs::sensor_msgs
+  std_msgs::std_msgs                 
   cv_bridge::cv_bridge
   ${OpenCV_LIBRARIES}
 )
@@ -31,7 +34,9 @@ add_executable(dashboard src/dashboard.cpp)
 target_link_libraries(dashboard PRIVATE
   rclcpp::rclcpp
   sensor_msgs::sensor_msgs
+  std_msgs::std_msgs                
   cv_bridge::cv_bridge
+  ament_index_cpp::ament_index_cpp 
   ${OpenCV_LIBRARIES}
 )
 target_include_directories(dashboard PRIVATE ${OpenCV_INCLUDE_DIRS})
@@ -39,6 +44,11 @@ target_include_directories(dashboard PRIVATE ${OpenCV_INCLUDE_DIRS})
 # =========================================================================
 # Install Rules
 # =========================================================================
+# Install models directory to share/ so dashboard.cpp can find it at runtime
+install(DIRECTORY models
+  DESTINATION share/${PROJECT_NAME}
+)
+
 # Install both executables so "ros2 run" can locate them
 install(TARGETS
   video_processor
