@@ -1,3 +1,12 @@
+# Ignore build, install, and log folders sitting inside the package
+build/
+install/
+log/
+.colcon/
+
+# Ignore the downloaded model weights
+models/
+
 # Ignore OS-specific files
 .DS_Store
 Thumbs.db
