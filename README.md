@@ -50,6 +50,8 @@ The package contains two independent C++ nodes:
 ## Installation and Setup
 
 ### 1. Structure the Workspace
+
+```text
 ~/ros2_ws/
 └── src/
     └── camera_processing/
@@ -60,6 +62,7 @@ The package contains two independent C++ nodes:
         └── src/
             ├── video_processor.cpp
             └── dashboard.cpp
+```
 
 ### 2. Compile the Package
 cd ~/ros2_ws
