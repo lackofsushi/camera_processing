@@ -4,8 +4,9 @@ install/
 log/
 .colcon/
 
-# Ignore the downloaded model weights
-models/
+# Ignore the downloaded model weights, but make sure directory is tracked
+models/*
+!models/.gitkeep
 
 # Ignore OS-specific files
 .DS_Store
