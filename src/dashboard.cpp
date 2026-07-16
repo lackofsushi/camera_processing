@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -90,23 +91,20 @@ public:
   ModelSelectorGUI(const std::string& window_name, 
                    int* active_model_ptr, 
                    const std::vector<std::string>& models) 
-    : window_name_(window_name), fallback_value_(0) 
+    : window_name_(window_name) 
   {
     // WINDOW_NORMAL allows explicit resizing so GTK doesn't squish the trackbar
     cv::namedWindow(window_name_, cv::WINDOW_NORMAL);
     cv::resizeWindow(window_name_, 600, 180);
 
-    if (models.size() > 1) {
-      cv::createTrackbar(
-        "Model Select", 
-        window_name_, 
-        active_model_ptr, 
-        static_cast<int>(models.size()) - 1, 
-        nullptr
-      );
-    } else {
-      cv::createTrackbar("No Models Loaded", window_name_, &fallback_value_, 1, nullptr);
-    }
+    const int max_value = std::max(1, static_cast<int>(models.size()) - 1);
+    cv::createTrackbar(
+      "Model Select",
+      window_name_,
+      active_model_ptr,
+      max_value,
+      nullptr
+    );
     
     // Create a matching dark gray canvas background
     bg_canvas_ = cv::Mat::zeros(180, 600, CV_8UC3);
@@ -131,10 +129,8 @@ public:
     bg_canvas_ = cv::Scalar(45, 45, 45);
 
     // 2. Get the name of the active model
-    std::string model_name = "None";
-    if (active_idx >= 0 && active_idx < static_cast<int>(models.size())) {
-      model_name = models[active_idx];
-    }
+    int safe_idx = std::max(0, std::min(active_idx, static_cast<int>(models.size()) - 1));
+    std::string model_name = models[safe_idx];
 
     // 3. Draw "Active Model:" subtitle
     cv::putText(bg_canvas_, "Active Model:", cv::Point(30, 60), 
@@ -151,7 +147,6 @@ public:
 private:
   std::string window_name_;
   cv::Mat bg_canvas_;
-  int fallback_value_;
 };
 
 // ============================================================================
@@ -166,13 +161,18 @@ public:
     // Scan dynamic models from installed directory
     std::string package_share_directory;
     try {
-      package_share_directory = ament_index_cpp::get_package_share_path("camera_processing").string();
+      // Use get_package_share_directory (the more common standard function)
+      package_share_directory = ament_index_cpp::get_package_share_path("camera_processing");
+      RCLCPP_INFO(this->get_logger(), "Found share path: %s", package_share_directory.c_str());
     } catch (const std::exception& e) {
       RCLCPP_FATAL(this->get_logger(), "Could not find package share directory: %s", e.what());
       rclcpp::shutdown();
       return;
     }
+
     fs::path model_dir = fs::path(package_share_directory) / "models";
+    RCLCPP_INFO(this->get_logger(), "Path used to scan models: %s", model_dir.c_str());
+    
     scan_model_directory(model_dir.string());
 
     // Initialize our decoupled, adaptive visualizers
@@ -195,7 +195,7 @@ public:
     // Run-once timer to trigger publishing AFTER the node finishes initialization
     one_shot_timer_ = this->create_wall_timer(0ms, [this]() {
       auto initial_msg = std_msgs::msg::String();
-      initial_msg.data = discovered_models_[active_model_index_];
+      initial_msg.data = get_selected_model_name();
       model_pub_->publish(initial_msg);
       last_model_index_ = active_model_index_;
       one_shot_timer_->cancel(); // Self-destruct after running once
@@ -206,10 +206,14 @@ public:
 
 private:
   void scan_model_directory(const std::string& path) {
+    discovered_models_.clear();
+    discovered_models_.push_back("No Model");
+
     if (!fs::exists(path) || !fs::is_directory(path)) {
-      discovered_models_.push_back("None Found");
+      RCLCPP_INFO(this->get_logger(), "Model directory '%s' does not exist or is not a directory. No models will be available.", path.c_str());
       return;
     }
+
     for (const auto& entry : fs::directory_iterator(path)) {
       if (entry.is_regular_file()) {
         std::string ext = entry.path().extension().string();
@@ -217,9 +221,6 @@ private:
           discovered_models_.push_back(entry.path().filename().string());
         }
       }
-    }
-    if (discovered_models_.empty()) {
-      discovered_models_.push_back("None Found");
     }
   }
 
@@ -230,6 +231,13 @@ private:
     } catch (const cv_bridge::Exception& e) {
       RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
     }
+  }
+
+  std::string get_selected_model_name() const {
+    if (active_model_index_ < 0 || active_model_index_ >= static_cast<int>(discovered_models_.size())) {
+      return "No Model";
+    }
+    return discovered_models_[active_model_index_];
   }
 
   void update_gui_loop() {
@@ -243,7 +251,7 @@ private:
     // Publish model selection updates when user interacts with slider
     if (active_model_index_ != last_model_index_) {
       auto msg = std_msgs::msg::String();
-      msg.data = discovered_models_[active_model_index_];
+      msg.data = get_selected_model_name();
       model_pub_->publish(msg);
       last_model_index_ = active_model_index_;
     }

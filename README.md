@@ -26,10 +26,51 @@ The package contains two independent C++ nodes:
 
 ## Model Management & Custom Models
 
-* Storage: Model files are indexed from the `models/` directory in the package root.
-* Custom Models: Users may add their own .onnx, .pb, or .xml files to the `models/` folder. The dashboard detects and lists these automatically after a rebuild.
+### 1. Model Downloader
+To populate the `models/` directory with standard detection models, use the provided script:
 
-> Note on Startup Sequence: ROS 2 DDS discovery requires initialization time. If `video_processor` is started before the `dashboard` has established its publisher and history buffer, the initial model selection message may be lost. Starting the `dashboard` node first ensures the Transient Local buffer is populated and available for late-joining nodes.
+```bash
+cd ~/ros2_ws/src/camera_processing
+./download_models.sh
+```
+
+## Model Configuration
+
+The `video_processor` requires a JSON configuration file for each model to handle preprocessing and output parsing. Each config file must share the same base name as its corresponding `.onnx` model file (e.g., `yolo_2026.onnx` requires `yolo_2026.json`).
+
+### Configuration Format
+
+| Key | Type | Description |
+| :--- | :--- | :--- |
+| `parser_type` | string | Defines the parsing logic (`yolo_grid` or `yolo_multi_head`). |
+| `input_size` | [int, int] | The network input resolution as `[width, height]`. |
+| `mean` | [float, float, float] | BGR mean values for normalization. |
+| `scale` | float | Scaling factor for input pixels (e.g., `1/255` ≈ `0.00392`). |
+| `swapRB` | bool | Whether to swap Red and Blue channels (set `true` for OpenCV). |
+| `crop` | bool | Whether to center-crop the image before inference. |
+| `layout` | string | Tensor layout (typically `NCHW`). |
+
+#### Parser Types
+The `parser_type` determines how the node interprets the model's output tensors:
+
+*   **`yolo_grid`**: Used for older, monolithic grid-based architectures (e.g., YOLOv2). Performs a single-tensor reshape followed by NMS.
+*   **`yolo_multi_head`**: Used for modern architectures (e.g., YOLOv8, YOLO11, YOLO2026). Handles outputs across multiple feature map scales, concatenates them, and performs global NMS.
+
+### Example Configuration
+
+```json
+{
+  "parser_type": "yolo_multi_head",
+  "input_size": [640, 640],
+  "mean": [0.0, 0.0, 0.0],
+  "scale": 0.00392157,
+  "swapRB": true,
+  "crop": false,
+  "layout": "NCHW"
+}
+```
+
+> Note on Startup Sequence: ROS 2 DDS discovery requires initialization time. If `video_processor` is started before the `dashboard` has established its publisher and history buffer, the initial model selection message **may** be lost. Starting the `dashboard` node first ensures the Transient Local buffer is populated and available for late-joining nodes.
 
 ---
 
