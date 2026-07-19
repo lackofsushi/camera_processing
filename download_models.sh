@@ -15,38 +15,49 @@ create_config() {
     local mean_val=$4
     local scale=$5
     local swap=$6
-    local parser=$7
+    local classes=$7
+    local anchors=$8
     
     local json_file="$TARGET_DIR/${filename%.onnx}.json"
     
     cat <<EOF > "$json_file"
 {
-  "parser_type": "$parser",
   "input_size": [$width, $height],
   "mean": [$mean_val, $mean_val, $mean_val],
   "scale": $scale,
   "swapRB": $swap,
   "crop": false,
-  "layout": "NCHW"
+  "classes": "$classes",
+  "anchors": $anchors
 }
 EOF
     echo "Generated config: $json_file"
 }
 
-echo "Downloading object detection models and generating configs..."
+# 1. Download labels
+if [ ! -f "$TARGET_DIR/coco.names" ]; then
+    curl -L -o "$TARGET_DIR/coco.names" "https://raw.githubusercontent.com/pjreddie/darknet/master/data/coco.names"
+fi
 
-# 1. YOLOv2 (Grid-based architecture)
+echo "Downloading Single-Head YOLOv2 models..."
+
+# YOLOv2 (Standard)
 if [ ! -f "$TARGET_DIR/yolov2.onnx" ]; then
     curl -L -o "$TARGET_DIR/yolov2.onnx" "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/yolov2-coco/model/yolov2-coco-9.onnx"
-    create_config "yolov2" 416 416 0.0 0.00392157 true "yolo_grid"
+    # COCO Anchors
+    ANCHORS="[0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828]"
+    create_config "yolov2" 416 416 0.0 0.00392157 true "coco.names" "$ANCHORS"
 fi
 
-# 2. YOLO 2026 (YOLO11n - Multi-head architecture)
-if [ ! -f "$TARGET_DIR/yolo_2026.onnx" ]; then
-    curl -L -o "$TARGET_DIR/yolo_2026.onnx" "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.onnx"
-    create_config "yolo_2026" 640 640 0.0 0.00392157 true "yolo_multi_head"
+# YOLOv2-Tiny
+if [ ! -f "$TARGET_DIR/yolov2-tiny.onnx" ]; then
+    # Standard Tiny YOLOv2 COCO anchors
+    # These are specific to Tiny's configuration
+    curl -L -o "$TARGET_DIR/yolov2-tiny.onnx" "https://github.com/onnx/models/raw/main/validated/vision/object_detection_segmentation/tiny-yolov2/model/tiny-yolov2-7.onnx"
+    
+    # Tiny YOLOv2 Anchors
+    ANCHORS="[1.08, 1.19, 3.42, 4.41, 6.63, 11.38, 9.42, 5.11, 16.62, 10.52]"
+    create_config "yolov2-tiny" 416 416 0.0 0.00392157 true "coco.names" "$ANCHORS"
 fi
-
-# Note: ResNet-50 excluded as it is a classification model, not detection.
 
 echo "Setup complete!"
