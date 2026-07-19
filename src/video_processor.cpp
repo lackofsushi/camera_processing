@@ -19,7 +19,8 @@ using namespace std::chrono_literals;
 
 class GenericDetector {
 public:
-    GenericDetector(const std::string& model_name, const std::string& model_path, const std::string& json_path) {
+    // Silenced the unused parameter warning by commenting out the variable name
+    GenericDetector(const std::string& /*model_name*/, const std::string& model_path, const std::string& json_path) {
         std::ifstream f(json_path);
         nlohmann::json cfg = nlohmann::json::parse(f);
         model_type_ = cfg["model_type"];
@@ -27,6 +28,15 @@ public:
         scale_ = cfg["scale"];
         
         if (cfg.contains("anchors")) anchors_ = cfg["anchors"].get<std::vector<float>>();
+
+        // DYNAMIC PREPROCESSING: Load parameters from JSON with safe fallbacks
+        if (cfg.contains("mean") && cfg["mean"].is_array() && cfg["mean"].size() == 3) {
+            mean_ = cv::Scalar(cfg["mean"][0], cfg["mean"][1], cfg["mean"][2]);
+        } else {
+            mean_ = cv::Scalar(0.0, 0.0, 0.0);
+        }
+        swap_rb_ = cfg.value("swap_rb", true);
+        crop_ = cfg.value("crop", false);
 
         // Labels
         std::string class_path = json_path.substr(0, json_path.find_last_of("/\\") + 1) + (std::string)cfg["classes"];
@@ -39,7 +49,8 @@ public:
     }
 
     int64_t detect(cv::Mat& frame) {
-        cv::Mat blob = cv::dnn::blobFromImage(frame, scale_, input_size_, cv::Scalar(0,0,0), true, false);
+        // Use dynamic parameters for blob creation
+        cv::Mat blob = cv::dnn::blobFromImage(frame, scale_, input_size_, mean_, swap_rb_, crop_);
         net_.setInput(blob);
         std::vector<cv::Mat> outputs;
         
@@ -73,6 +84,11 @@ private:
     cv::dnn::Net net_;
     cv::Size input_size_;
     double scale_;
+    
+    // Dynamic preprocessing state variables
+    cv::Scalar mean_;
+    bool swap_rb_;
+    bool crop_;
 
     void visualize(cv::Mat& frame, const cv::Rect& box, float conf, int id) {
         std::string label = (id >= 0 && id < (int)labels_.size()) ? labels_[id] : "ID:" + std::to_string(id);
@@ -147,14 +163,8 @@ public:
             [this](const std_msgs::msg::String::SharedPtr msg) {
                 current_detector_ = DetectorFactory::getDetector(msg->data);
                 current_model_name_ = msg->data;
-                
-                // Reset rolling benchmarks completely on model change
-                min_time_ = 0;
-                max_time_ = 0;
-                total_time_ = 0;
-                frame_count_ = 0;
-                
-                RCLCPP_INFO(this->get_logger(), "Loaded: %s (Stats Reset)", msg->data.c_str());
+                min_time_ = 0; max_time_ = 0; total_time_ = 0; frame_count_ = 0;
+                RCLCPP_INFO(this->get_logger(), "Loaded: %s", msg->data.c_str());
             });
         cap_.open(0);
         timer_ = this->create_wall_timer(33ms, std::bind(&VideoProcessor::timer_callback, this));
@@ -166,42 +176,26 @@ private:
             int64_t duration = 0;
             if (current_detector_) {
                 duration = current_detector_->detect(frame);
-                
-                // Update stats rolling state variables
                 int32_t current_ms = static_cast<int32_t>(duration);
-                if (frame_count_ == 0) {
-                    min_time_ = current_ms;
-                    max_time_ = current_ms;
-                } else {
-                    if (current_ms < min_time_) min_time_ = current_ms;
-                    if (current_ms > max_time_) max_time_ = current_ms;
-                }
-                total_time_ += current_ms;
-                frame_count_++;
+                if (frame_count_ == 0) { min_time_ = current_ms; max_time_ = current_ms; }
+                else { if (current_ms < min_time_) min_time_ = current_ms; if (current_ms > max_time_) max_time_ = current_ms; }
+                total_time_ += current_ms; frame_count_++;
             }
             
             camera_processing::msg::DetectionResult msg;
             msg.image = *cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", frame).toImageMsg();
             msg.inference_time = static_cast<int32_t>(duration);
             msg.model_name = current_model_name_;
-            
-            // Append running telemetry metrics
             msg.min_inference_time = min_time_;
             msg.max_inference_time = max_time_;
             msg.avg_inference_time = frame_count_ > 0 ? static_cast<float>(total_time_) / frame_count_ : 0.0f;
-            
             result_pub_->publish(msg);
         }
     }
     cv::VideoCapture cap_;
     std::string current_model_name_ = "No Model";
-    
-    // Telemetry storage variables
-    int32_t min_time_ = 0;
-    int32_t max_time_ = 0;
-    int64_t total_time_ = 0;
-    int64_t frame_count_ = 0;
-
+    int32_t min_time_ = 0, max_time_ = 0;
+    int64_t total_time_ = 0, frame_count_ = 0;
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Publisher<camera_processing::msg::DetectionResult>::SharedPtr result_pub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr model_sub_;
