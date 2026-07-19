@@ -13,6 +13,15 @@ find_package(std_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+# =========================================================================
+# Custom Message Generation
+# =========================================================================
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/DetectionResult.msg"
+  DEPENDENCIES sensor_msgs
+)
 
 # =========================================================================
 # 1. Target: video_processor
@@ -29,6 +38,10 @@ target_link_libraries(video_processor PRIVATE
 )
 target_include_directories(video_processor PRIVATE ${OpenCV_INCLUDE_DIRS})
 
+# Modern ROS 2 Interface Link Method
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(video_processor PRIVATE "${cpp_typesupport_target}")
+
 # =========================================================================
 # 2. Target: dashboard
 # =========================================================================
@@ -43,6 +56,9 @@ target_link_libraries(dashboard PRIVATE
   ${OpenCV_LIBRARIES}
 )
 target_include_directories(dashboard PRIVATE ${OpenCV_INCLUDE_DIRS})
+
+# Modern ROS 2 Interface Link Method
+target_link_libraries(dashboard PRIVATE "${cpp_typesupport_target}")
 
 # =========================================================================
 # Install Rules

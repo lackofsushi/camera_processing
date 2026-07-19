@@ -1,0 +1,6 @@
+sensor_msgs/Image image
+int32 inference_time
+string model_name
+int32 min_inference_time
+int32 max_inference_time
+float32 avg_inference_time
