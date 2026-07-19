@@ -34,8 +34,8 @@ public:
         std::string line;
         while (std::getline(class_file, line)) if (!line.empty()) labels_.push_back(line);
 
-        // Load correct engine
-        net_ = cv::dnn::readNetFromONNX(model_path);
+        // Load the model
+        net_ = cv::dnn::readNet(model_path);
     }
 
     int64_t detect(cv::Mat& frame) {
