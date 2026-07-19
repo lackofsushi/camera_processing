@@ -63,6 +63,11 @@ target_link_libraries(dashboard PRIVATE "${cpp_typesupport_target}")
 # =========================================================================
 # Install Rules
 # =========================================================================
+# PRE-INSTALL HOOK: Wipe the destination models directory to prevent stale files
+install(CODE "
+  file(REMOVE_RECURSE \"\${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models\")
+")
+
 # Model directory
 install(DIRECTORY models
   DESTINATION share/${PROJECT_NAME}
