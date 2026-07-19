@@ -1,6 +1,6 @@
 # camera_processing
 
-ROS 2 package featuring a modular video streaming, real-time visualization, and dynamic model-selection pipeline.
+ROS 2 package featuring a modular video streaming and processing pipeline with real-time visualization, and dynamic model-selection for the processing (object detection). It also contains minimal performance data for inferences done in the video processing pipeline.
 
 The package compiles into two isolated runtime executables that communicate over ROS 2 topics.
 
@@ -14,13 +14,14 @@ The package contains two independent C++ nodes:
    * Accesses the local video capture device via OpenCV.
    * Grabs camera frames and publishes them to `/camera/image`.
    * Subscribes to `/selected_model` using a Reliable + Transient Local QoS profile.
-   * Intent: Dynamically update the internal model state and apply the selected machine learning model to the incoming video frames in real-time.
+   * Dynamically update the internal model state and apply the selected machine learning model to the incoming video frames in real-time.
 
 2. `dashboard`:
    * Scans the `models/` directory for .onnx, .pb, or .xml files.
    * Spawns an OpenCV GUI (`Model Controller`) for dynamic model switching.
    * Publishes the selected model filename to `/selected_model` using a Transient Local QoS profile.
    * Renders the video stream received from the `/camera/image` topic.
+   * Displays min, max, avg time for every object detection inference.
 
 ---
 
@@ -36,7 +37,7 @@ cd ~/ros2_ws/src/camera_processing
 
 ## Model Configuration
 
-The `video_processor` requires a JSON configuration file for each model to handle preprocessing and output parsing. Each config file must share the same base name as its corresponding `.onnx` model file (e.g., `yolo_2026.onnx` requires `yolo_2026.json`).
+The `video_processor` requires a JSON configuration file for each model to handle preprocessing and output parsing. Each config file must share the same base name as its corresponding `.onnx` model file (e.g., `yolo_v2.onnx` requires `yolo_v2.json`).
 
 ### Configuration Format
 
@@ -51,26 +52,26 @@ The `video_processor` requires a JSON configuration file for each model to handl
 | `layout` | string | Tensor layout (typically `NCHW`). |
 
 #### Parser Types
-The `parser_type` determines how the node interprets the model's output tensors:
+The `model_type` determines how the node interprets the model's output tensors. Currently only one type is implemented:
 
-*   **`yolo_grid`**: Used for older, monolithic grid-based architectures (e.g., YOLOv2). Performs a single-tensor reshape followed by NMS.
-*   **`yolo_multi_head`**: Used for modern architectures (e.g., YOLOv8, YOLO11, YOLO2026). Handles outputs across multiple feature map scales, concatenates them, and performs global NMS.
+*   **`yolo_v2`**: Used for older, monolithic grid-based architectures (e.g., YOLOv2). Performs a single-tensor reshape followed by NMS.
 
 ### Example Configuration
 
 ```json
 {
-  "parser_type": "yolo_multi_head",
-  "input_size": [640, 640],
-  "mean": [0.0, 0.0, 0.0],
+  "model_type": "yolov2",
+  "input_size": [416, 416],
+  "mean": [0, 0, 0],
   "scale": 0.00392157,
   "swapRB": true,
   "crop": false,
-  "layout": "NCHW"
+  "classes": "coco.names",
+  "anchors": [0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828]
 }
 ```
 
-> Note on Startup Sequence: ROS 2 DDS discovery requires initialization time. If `video_processor` is started before the `dashboard` has established its publisher and history buffer, the initial model selection message **may** be lost. Starting the `dashboard` node first ensures the Transient Local buffer is populated and available for late-joining nodes.
+> Note: Anchors is optional since not all models use it.
 
 ---
 

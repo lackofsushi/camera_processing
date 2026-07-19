@@ -32,6 +32,7 @@ public:
   }
 
   bool render(const cv::Mat& frame) {
+    // Only check if window was closed after the first run to avoid false negatives on initial launch
     if (!is_first_run_) {
       try {
         double prop = cv::getWindowProperty(window_name_, cv::WND_PROP_VISIBLE);
@@ -181,7 +182,8 @@ public:
       "camera/image", 10, std::bind(&DashboardNode::result_callback, this, std::placeholders::_1));
 
     gui_timer_ = this->create_wall_timer(33ms, std::bind(&DashboardNode::update_gui_loop, this));
- 
+    
+    // Ensures that the initial model selection is published after the GUI is fully initialized and the Node is spinning
     one_shot_timer_ = this->create_wall_timer(0ms, [this]() {
       auto initial_msg = std_msgs::msg::String();
       initial_msg.data = get_selected_model_name();

@@ -110,27 +110,71 @@ private:
     }
 
     void parse_yolov2(const cv::Mat& output, cv::Size fs, std::vector<cv::Rect>& b, std::vector<float>& c, std::vector<int>& i) {
+        static constexpr float OBJECTNESS_THRESHOLD = 0.3f;
+        static constexpr float CONFIDENCE_THRESHOLD = 0.3f;
+
+        // Calculate total anchor boxes (each anchor has 2 values: width and height)
         int num_anchors = anchors_.size() / 2;
+        
+        // Extract the grid dimension (e.g., 13 for a 13x13 feature map grid)
         int grid = output.size[2];
+        
+        // Lambda for Sigmoid activation to squash raw logits into 0.0 - 1.0 ranges
         auto sig = [](float x) { return 1.0f / (1.0f + std::exp(-x)); };
-        const float* d = (const float*)output.data;
+        
+        // MODERN C++ CAST: Explicitly reinterpret the raw byte buffer pointer (uchar*) as a float pointer
+        const float* d = reinterpret_cast<const float*>(output.data);
+        
+        // Stride is the number of channels per anchor box (5 attributes + number of classes)
         int stride = output.size[1] / num_anchors;
 
+        // Loop through every anchor box configuration
         for (int a = 0; a < num_anchors; ++a) {
+            // Loop through every row of the grid map
             for (int r = 0; r < grid; ++r) {
+                // Loop through every column of the grid map
                 for (int col = 0; col < grid; ++col) {
+                    
+                    // Compute the base pointer offset for the current anchor at grid cell (col, r)
                     int offset = a * stride * grid * grid + (r * grid + col);
+                    
+                    // Index 4 corresponds to the raw objectness confidence score channel
                     float obj = sig(d[offset + 4 * grid * grid]);
-                    if (obj < 0.3f) continue;
+                    
+                    // Fast rejection: Skip calculation early if no object is likely to exist here
+                    if (obj < OBJECTNESS_THRESHOLD) continue;
+                    
+                    // Loop through all potential object class labels
                     for (int cls = 0; cls < (int)labels_.size(); ++cls) {
+                        
+                        // Class logits start at channel index 5 onwards
                         float prob = sig(d[offset + (5 + cls) * grid * grid]);
-                        if (obj * prob > 0.3f) {
+                        
+                        // Calculate final combined probability (Objectness * Class Probability)
+                        if (obj * prob > CONFIDENCE_THRESHOLD) {
+                            
+                            // Decode bounding box center coordinates relative to the grid cell
+                            // Channel 0 = tx (X offset), Channel 1 = ty (Y offset)
                             float x = (col + sig(d[offset])) / grid;
                             float y = (r + sig(d[offset + grid * grid])) / grid;
+                            
+                            // Decode bounding box dimensions scaled against the specific anchor dimensions
+                            // Channel 2 = tw (Width log-scaling), Channel 3 = th (Height log-scaling)
                             float w = std::exp(d[offset + 2 * grid * grid]) * anchors_[a * 2] / grid;
                             float h = std::exp(d[offset + 3 * grid * grid]) * anchors_[a * 2 + 1] / grid;
-                            b.emplace_back((int)((x - w/2)*fs.width), (int)((y - h/2)*fs.height), (int)(w*fs.width), (int)(h*fs.height));
-                            c.push_back(obj * prob); i.push_back(cls);
+                            
+                            // Convert normalized center-based coordinates (x, y, w, h) into absolute 
+                            // pixel-based top-left corner coordinates required by cv::Rect
+                            b.emplace_back(
+                                (int)((x - w/2) * fs.width), 
+                                (int)((y - h/2) * fs.height), 
+                                (int)(w * fs.width), 
+                                (int)(h * fs.height)
+                            );
+                            
+                            // Record the valid combined confidence score and the matching class ID
+                            c.push_back(obj * prob); 
+                            i.push_back(cls);
                         }
                     }
                 }
