@@ -43,7 +43,7 @@ The `video_processor` requires a JSON configuration file for each model to handl
 
 | Key | Type | Description |
 | :--- | :--- | :--- |
-| `parser_type` | string | Defines the parsing logic (`yolo_grid` or `yolo_multi_head`). |
+| `model_type` | string | Defines the parsing logic. Note: The parser for the model type needs to be implemented in the video processor node |
 | `input_size` | [int, int] | The network input resolution as `[width, height]`. |
 | `mean` | [float, float, float] | BGR mean values for normalization. |
 | `scale` | float | Scaling factor for input pixels (e.g., `1/255` ≈ `0.00392`). |
@@ -132,3 +132,7 @@ source install/setup.bash
   source ~/ros2_ws/install/setup.bash
   ros2 run camera_processing dashboard
 ```
+### 4. Future work
+* Flag to unload old model when new model is selected.
+* Throughput and latency execution mode for video processing
+* Support for other models (needs OpenCV 5.X or other frameworks) 
